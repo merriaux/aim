@@ -1,6 +1,8 @@
+import datetime
 import logging
 import os
 import shutil
+import time
 
 from collections import defaultdict
 from contextlib import contextmanager
@@ -403,15 +405,73 @@ class Repo:
         container = RocksUnionContainer(os.path.join(self.path, 'meta'), read_only=True)
         return [h for h in map(get_run_hash_from_prefix, container.corrupted_dbs) if h is not None]
 
+    # Progress file is touched every 5s when a run is alive. After 10 minutes
+    # without a touch and no live lock, the run is considered crashed and
+    # auto-closed so the UI stops showing it as active.
+    _STALE_PROGRESS_THRESHOLD_SECS = 10 * 60
+
     def _active_run_hashes(self) -> Set[str]:
         if self.is_remote_repo:
             return set(self._remote_repo_proxy.list_active_runs())
-        else:
-            chunks_dir = os.path.join(self.path, 'meta', 'progress')
-            if os.path.exists(chunks_dir):
-                return set(os.listdir(chunks_dir))
-            else:
-                return set()
+
+        chunks_dir = os.path.join(self.path, 'meta', 'progress')
+        if not os.path.exists(chunks_dir):
+            return set()
+
+        active = set()
+        now = time.time()
+        for run_hash in os.listdir(chunks_dir):
+            progress_path = os.path.join(chunks_dir, run_hash)
+            try:
+                age_secs = now - os.path.getmtime(progress_path)
+            except OSError:
+                continue
+
+            if age_secs < self._STALE_PROGRESS_THRESHOLD_SECS:
+                active.add(run_hash)
+                continue
+
+            # File hasn't been touched in 10 min — verify lock is also stale.
+            lock_info = self._lock_manager.get_run_lock_info(run_hash)
+            if lock_info.locked:
+                lock_path = (
+                    self._lock_manager.locks_path
+                    / self._lock_manager.softlock_fname(run_hash)
+                )
+                if not self._lock_manager.is_stalled_lock(lock_path):
+                    # Live process still holds the lock: keep active.
+                    active.add(run_hash)
+                    continue
+
+            logger.info(
+                "Auto-closing stale run '%s' (progress age: %.0fs, lock stale: %s)",
+                run_hash, age_secs, lock_info.locked,
+            )
+            try:
+                self._auto_close_stale_run(run_hash, progress_path)
+            except Exception as exc:
+                logger.warning("Failed to auto-close stale run '%s': %s", run_hash, exc)
+                active.add(run_hash)
+
+        return active
+
+    def _auto_close_stale_run(self, run_hash: str, progress_path: str) -> None:
+        import pytz
+
+        self._lock_manager.release_locks(run_hash, force=False)
+
+        try:
+            meta_tree = self.request_tree('meta', run_hash, read_only=False).subtree('meta')
+            meta_run_tree = meta_tree.subtree('chunks').subtree(run_hash)
+            if not meta_run_tree.get('end_time'):
+                meta_run_tree['end_time'] = datetime.datetime.now(pytz.utc).timestamp()
+        except Exception as exc:
+            logger.warning("Could not set end_time for stale run '%s': %s", run_hash, exc)
+
+        try:
+            os.remove(progress_path)
+        except OSError:
+            pass
 
     def list_active_runs(self) -> List[str]:
         return list(self._active_run_hashes())
