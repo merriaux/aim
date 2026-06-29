@@ -63,6 +63,9 @@ const ENDPOINTS = {
     UPDATE: '',
     DELETE: '',
   },
+  GPU: {
+    BASE: '/gpu',
+  },
 };
 
 export default ENDPOINTS;

@@ -26,6 +26,7 @@ def create_app():
     from aim.web.api.dashboard_apps.views import dashboard_apps_router
     from aim.web.api.dashboards.views import dashboards_router
     from aim.web.api.experiments.views import experiment_router
+    from aim.web.api.gpu.views import gpu_router
     from aim.web.api.projects.project import Project
     from aim.web.api.projects.views import projects_router
     from aim.web.api.reports.views import reports_router
@@ -51,6 +52,7 @@ def create_app():
     api_app.include_router(dashboard_apps_router, prefix='/apps')
     api_app.include_router(dashboards_router, prefix='/dashboards')
     api_app.include_router(experiment_router, prefix='/experiments')
+    api_app.include_router(gpu_router, prefix='/gpu')
     api_app.include_router(projects_router, prefix='/projects')
     api_app.include_router(runs_router, prefix='/runs')
     api_app.include_router(tags_router, prefix='/tags')

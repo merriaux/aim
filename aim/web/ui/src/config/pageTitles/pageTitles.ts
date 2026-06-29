@@ -16,6 +16,7 @@ const pageTitles = {
   METRICS_EXPLORER_V2: 'Metrics Explorer v2',
   REPORTS: 'Reports',
   REPORT: 'Report',
+  GPU_USAGE: 'GPU Usage',
 };
 
 export default pageTitles;

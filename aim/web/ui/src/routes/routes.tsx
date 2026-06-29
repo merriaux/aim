@@ -65,6 +65,10 @@ const Report = React.lazy(
   () => import(/* webpackChunkName: "Report" */ 'pages/Report/Report'),
 );
 
+const GpuUsage = React.lazy(
+  () => import(/* webpackChunkName: "gpu" */ 'pages/GpuUsage/GpuUsage'),
+);
+
 export interface IRoute {
   path: PathEnum;
   component:
@@ -258,6 +262,15 @@ const routes: { [key: string]: any } = {
     displayName: 'Report',
     isExact: true,
     title: pageTitlesEnum.REPORT,
+  },
+  GPU_USAGE: {
+    path: PathEnum.GPU_Usage,
+    component: GpuUsage,
+    showInSidebar: true,
+    displayName: 'GPU Usage',
+    icon: 'distributions',
+    isExact: true,
+    title: pageTitlesEnum.GPU_USAGE,
   },
 };
 

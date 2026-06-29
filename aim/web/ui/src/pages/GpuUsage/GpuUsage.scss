@@ -1,0 +1,202 @@
+@use 'src/styles/abstracts' as *;
+
+.GpuUsage {
+  height: 100vh;
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    margin-bottom: 1.75rem;
+
+    &__title {
+      font-size: $text-xl;
+      font-weight: $font-600;
+      color: $pico;
+    }
+
+    &__refresh {
+      margin-left: auto;
+      font-size: $text-sm;
+      color: $pico-50;
+    }
+  }
+
+  &__errorBanner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(230, 78, 72, 0.08);
+    border: 1px solid rgba(230, 78, 72, 0.25);
+    border-radius: 0.375rem;
+    color: $error-color;
+    font-size: $text-sm;
+    font-family: 'Inconsolata', monospace;
+  }
+
+  &__section {
+    margin-bottom: 2rem;
+
+    &__label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: $text-xs;
+      font-weight: $font-600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: $pico-50;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid $cuddle-50;
+      margin-bottom: 0.875rem;
+    }
+
+    &__count {
+      font-family: 'Inconsolata', monospace;
+      font-size: $text-xs;
+      background: $pico-5;
+      border: 1px solid $cuddle-50;
+      border-radius: 0.75rem;
+      padding: 0.1rem 0.5rem;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  &__chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: $cuddle-10;
+    border: 1px solid $cuddle-50;
+    border-radius: 0.375rem;
+    font-family: 'Inconsolata', monospace;
+    font-size: $text-sm;
+    color: $pico;
+
+    &__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: $success-color;
+      box-shadow: 0 0 5px rgba(43, 199, 132, 0.5);
+    }
+  }
+
+  &__emptyChips {
+    font-size: $text-sm;
+    color: $pico-50;
+    padding: 0.5rem 0;
+  }
+
+  &__tableWrapper {
+    overflow-x: auto;
+    border: 1px solid $cuddle-50;
+    border-radius: 0.375rem;
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: $text-sm;
+
+    thead tr {
+      background: $cuddle-10;
+    }
+
+    th {
+      text-align: left;
+      font-size: $text-xs;
+      font-weight: $font-600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: $pico-50;
+      padding: 0.5rem 0.875rem;
+      border-bottom: 1px solid $cuddle-50;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.625rem 0.875rem;
+      border-bottom: 1px solid $cuddle-50;
+      color: $pico;
+      font-variant-numeric: tabular-nums;
+
+      &.mono {
+        font-family: 'Inconsolata', monospace;
+        font-size: $text-xs;
+        color: $primary-dark;
+      }
+
+      &.dim {
+        color: $pico-50;
+      }
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover td {
+      background: $cuddle-10;
+    }
+  }
+
+  &__activePill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: 'Inconsolata', monospace;
+    font-size: $text-xs;
+    color: $success-color;
+    background: rgba(43, 199, 132, 0.1);
+    border: 1px solid rgba(43, 199, 132, 0.25);
+    border-radius: 0.75rem;
+    padding: 0.1rem 0.5rem;
+
+    &__dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: $success-color;
+      animation: gpuPulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+  }
+
+  &__loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: $pico-50;
+    font-size: $text-sm;
+  }
+
+  &__hint {
+    margin-top: 0.5rem;
+    font-size: $text-xs;
+    color: $pico-40;
+  }
+}
+
+@keyframes gpuPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .GpuUsage__activePill__dot {
+    animation: none;
+  }
+}
