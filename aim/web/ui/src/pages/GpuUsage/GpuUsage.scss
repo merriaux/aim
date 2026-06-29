@@ -188,6 +188,16 @@
     font-size: $text-xs;
     color: $pico-40;
   }
+
+  &__runLink {
+    color: $primary-dark;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      color: $primary;
+    }
+  }
 }
 
 @keyframes gpuPulse {

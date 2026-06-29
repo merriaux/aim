@@ -1,9 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import humanizeDuration from 'humanize-duration';
 
 import ErrorBoundary from 'components/ErrorBoundary/ErrorBoundary';
 
 import { getAPIHost } from 'config/config';
+import { PathEnum } from 'config/enums/routesEnum';
 
 import {
   IGpuActiveRun,
@@ -163,16 +165,22 @@ function GpuUsage(): React.FunctionComponentElement<React.ReactNode> {
                           {run.hostname ?? <span className='dim'>Unknown</span>}
                         </td>
                         <td>
-                          {run.experiment ?? (
-                            <span className='dim'>default</span>
+                          {run.tags.length > 0 ? (
+                            run.tags[0]
+                          ) : (
+                            <span className='dim'>—</span>
                           )}
                         </td>
                         <td>
-                          {run.name ?? (
-                            <span className='mono dim'>
-                              {run.hash.slice(0, 8)}
-                            </span>
-                          )}
+                          <Link
+                            className='GpuUsage__runLink'
+                            to={PathEnum.Run_Detail.replace(
+                              ':runHash',
+                              run.hash,
+                            )}
+                          >
+                            {run.name ?? run.hash.slice(0, 8)}
+                          </Link>
                         </td>
                         <td className='mono'>{formatDuration(run.duration)}</td>
                         <td>

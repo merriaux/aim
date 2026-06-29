@@ -44,6 +44,10 @@ async def gpu_status_api():
                 hostname = run['hostname']
             except Exception:
                 hostname = None
+            try:
+                tags = [tag.name for tag in run.props.tags_obj]
+            except Exception:
+                tags = []
             active_runs.append(
                 {
                     'hash': run.hash,
@@ -52,6 +56,7 @@ async def gpu_status_api():
                     'creation_time': run.creation_time,
                     'duration': int(now - run.creation_time),
                     'hostname': hostname,
+                    'tags': tags,
                 }
             )
         except Exception:

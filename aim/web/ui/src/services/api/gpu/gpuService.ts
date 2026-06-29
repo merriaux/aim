@@ -15,6 +15,7 @@ export interface IGpuActiveRun {
   creation_time: number;
   duration: number;
   hostname: string | null;
+  tags: string[];
 }
 
 export interface IGpuStatusResponse {
