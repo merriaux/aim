@@ -448,18 +448,27 @@ class Repo:
                 run_hash, age_secs, lock_info.locked,
             )
             try:
-                self._auto_close_stale_run(run_hash, progress_path)
+                closed = self._auto_close_stale_run(run_hash, progress_path)
             except Exception as exc:
                 logger.warning("Failed to auto-close stale run '%s': %s", run_hash, exc)
+                closed = False
+            if not closed:
+                # Could not durably close the run: keep reporting it active so a
+                # later scan retries, instead of silently dropping it.
                 active.add(run_hash)
 
         return active
 
-    def _auto_close_stale_run(self, run_hash: str, progress_path: str) -> None:
+    def _auto_close_stale_run(self, run_hash: str, progress_path: str) -> bool:
         import pytz
 
         self._lock_manager.release_locks(run_hash, force=False)
 
+        # Only remove the progress file once end_time is durably written.
+        # Removing it unconditionally (e.g. after a failed write due to a
+        # concurrent worker holding the RocksDB lock) would drop the run from
+        # list_active_runs() forever while leaving end_time=None, so run.active
+        # stays True permanently and nothing ever retries the close.
         try:
             meta_tree = self.request_tree('meta', run_hash, read_only=False).subtree('meta')
             meta_run_tree = meta_tree.subtree('chunks').subtree(run_hash)
@@ -467,11 +476,14 @@ class Repo:
                 meta_run_tree['end_time'] = datetime.datetime.now(pytz.utc).timestamp()
         except Exception as exc:
             logger.warning("Could not set end_time for stale run '%s': %s", run_hash, exc)
+            # Leave the progress file in place so a later scan retries.
+            return False
 
         try:
             os.remove(progress_path)
         except OSError:
             pass
+        return True
 
     def list_active_runs(self) -> List[str]:
         return list(self._active_run_hashes())

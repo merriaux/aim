@@ -17,6 +17,7 @@ from aim.ext.transport.config import (
     AIM_SERVER_MOUNTED_REPO_PATH,
 )
 from aim.sdk.repo import Repo
+from aim.sdk.run_status_manager import RunStatusManager
 from aim.sdk.utils import clean_repo_path
 from aim.web.configs import AIM_ENV_MODE_KEY
 
@@ -83,6 +84,12 @@ def server(host, port, repo, ssl_keyfile, ssl_certfile, base_path, log_level, de
     click.secho('Running Aim Server on repo `{}`'.format(repo), fg='yellow')
     click.echo('Server is mounted on aim://{}:{}'.format(host, port), err=True)
     click.echo('Press Ctrl+C to exit')
+
+    # Runs tracked through the remote tracking server are otherwise never
+    # scanned for staleness (only `aim up` starts a RunStatusManager), so a
+    # crashed remote run would stay "in progress" forever.
+    run_status_mng = RunStatusManager(repo_inst)
+    run_status_mng.start()
 
     try:
         cmd = build_uvicorn_command(

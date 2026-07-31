@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import threading
 import time
@@ -11,6 +12,9 @@ import pytz
 
 from aim import Repo
 from aim.sdk.run_status_watcher import Event
+
+
+logger = logging.getLogger(__name__)
 
 
 class RunStatusManager:
@@ -43,7 +47,13 @@ class RunStatusManager:
 
     def _run_forever(self):
         while not self._stop_event.is_set():
-            self.check_and_terminate_stalled_runs()
+            try:
+                self.check_and_terminate_stalled_runs()
+            except Exception:
+                # Never let an unexpected error kill the monitor thread; a dead
+                # thread would silently stop closing stalled runs for the whole
+                # lifetime of the process.
+                logger.exception('Error while checking for stalled runs')
             time.sleep(self.scan_interval)
 
     def _runs_with_progress(self) -> Iterable[str]:
@@ -89,7 +99,13 @@ class RunStatusManager:
             )
             if meta_run_tree.get('end_time') is None:
                 meta_run_tree['end_time'] = datetime.datetime.now(pytz.utc).timestamp()
+            # Only drop the progress file once end_time is durably written above.
+            # If the write raises (e.g. a concurrent writer holds the lock), we
+            # keep the progress file so the next scan retries; removing it while
+            # end_time stays None would leave the run active forever.
             progress_path = self.progress_dir / run_hash
             progress_path.unlink(missing_ok=True)
         except (aimrocks.errors.RocksIOError, aimrocks.errors.Corruption):
             self._corrupted_runs.add(run_hash)
+        except Exception:
+            logger.exception("Failed to mark run '%s' as terminated", run_hash)
