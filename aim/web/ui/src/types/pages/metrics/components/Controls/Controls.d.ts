@@ -28,6 +28,7 @@ export interface IControlProps {
   selectOptions: IGroupingSelectOption[];
   tooltip?: ITooltip;
   legends?: LegendsConfig;
+  contextGroupingKey: string;
   ignoreOutliers: boolean;
   zoom?: IChartZoom;
   highlightMode: HighlightEnum;
@@ -41,6 +42,7 @@ export interface IControlProps {
   onChangeTooltip: (tooltip: Partial<ITooltip>) => void;
   onIgnoreOutliersChange: () => void;
   onLegendsChange: (legends: Partial<LegendsConfig>) => void;
+  onContextGroupingKeyChange: (contextGroupingKey: string) => void;
   onHighlightModeChange: (mode: number) => void;
   onDensityTypeChange: (type: DensityOptions) => void;
   onSmoothingChange: (args: Partial<ISmoothing>) => void;

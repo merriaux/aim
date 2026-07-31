@@ -14,4 +14,6 @@ export interface IMetricsBarProps {
   title: string;
   tableView?: 'table' | 'legend';
   onTableViewChange?: (value: 'table' | 'legend') => void;
+  contextGroupingKey?: string;
+  onContextGroupingKeyChange?: (value: string) => void;
 }

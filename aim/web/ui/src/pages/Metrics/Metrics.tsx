@@ -46,6 +46,8 @@ function Metrics(
   const [isProgressBarVisible, setIsProgressBarVisible] =
     React.useState<boolean>(false);
   const [tableView, setTableView] = React.useState<'table' | 'legend'>('table');
+  const [contextGroupingKey, setContextGroupingKey] =
+    React.useState<string>('subset');
   const chartProps = React.useMemo(() => {
     return (props.lineChartData || []).map((chartData: ILine[]) => ({
       axesScaleType: props.axesScaleType,
@@ -115,6 +117,8 @@ function Metrics(
               title={pageTitlesEnum.METRICS_EXPLORER}
               tableView={tableView}
               onTableViewChange={setTableView}
+              contextGroupingKey={contextGroupingKey}
+              onContextGroupingKeyChange={setContextGroupingKey}
             />
             <div className='Metrics__SelectForm__Grouping__container'>
               <SelectForm
@@ -194,6 +198,7 @@ function Metrics(
                         zoom={props.zoom}
                         chartProps={chartProps}
                         resizeMode={props.resizeMode}
+                        contextGroupingKey={contextGroupingKey}
                         onActivePointChange={props.onActivePointChange}
                         onRunsTagsChange={props.onRunsTagsChange}
                         onChangeTooltip={props.onChangeTooltip}
@@ -207,6 +212,7 @@ function Metrics(
                             selectOptions={props.groupingSelectOptions}
                             tooltip={props.tooltip}
                             legends={props.legends}
+                            contextGroupingKey={contextGroupingKey}
                             smoothing={props.smoothing}
                             densityType={props.densityType}
                             ignoreOutliers={props.ignoreOutliers}
@@ -221,6 +227,7 @@ function Metrics(
                               props.onIgnoreOutliersChange
                             }
                             onLegendsChange={props.onLegendsChange}
+                            onContextGroupingKeyChange={setContextGroupingKey}
                             onZoomChange={props.onZoomChange}
                             onHighlightModeChange={props.onHighlightModeChange}
                             onAxesScaleTypeChange={props.onAxesScaleTypeChange}

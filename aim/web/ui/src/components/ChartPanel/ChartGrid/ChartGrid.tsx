@@ -19,13 +19,15 @@ import { IChartGridProps } from '.';
 
 import './ChartGrid.scss';
 
-// Subset value carried by each line at runtime via metric.context.subset.
-const SUBSET_CONTEXT_KEY = 'subset';
+const DEFAULT_CONTEXT_GROUPING_KEY = 'subset';
 
-function getChartSubset(chartData: any): string | undefined {
+function getChartContextValue(
+  chartData: any,
+  contextKey: string,
+): string | undefined {
   const context = chartData?.[0]?.context;
-  const subset = context?.[SUBSET_CONTEXT_KEY];
-  return subset === undefined || subset === null ? undefined : String(subset);
+  const value = context?.[contextKey];
+  return value === undefined || value === null ? undefined : String(value);
 }
 
 function ChartGrid({
@@ -40,6 +42,7 @@ function ChartGrid({
   chartPanelOffsetHeight,
   onMount,
   controls,
+  contextGroupingKey = DEFAULT_CONTEXT_GROUPING_KEY,
 }: IChartGridProps): React.FunctionComponentElement<React.ReactNode> {
   const [fullScreenIndex, setFullScreenIndex] = React.useState<number | null>(
     null,
@@ -70,28 +73,28 @@ function ChartGrid({
     ) as GridSize;
   }
 
-  // Group chart panels into foldable sections by metric.context.subset.
-  // Only activated when at least two distinct subset values are present,
+  // Group chart panels into foldable sections by a metric.context field.
+  // Only activated when at least two distinct context values are present,
   // otherwise the charts are rendered as a flat grid (original behaviour).
-  const subsetSections = React.useMemo(() => {
-    const sections: { subset: string | undefined; indices: number[] }[] = [];
+  const contextSections = React.useMemo(() => {
+    const sections: { value: string | undefined; indices: number[] }[] = [];
     const byKey: Record<string, number[]> = {};
     data.forEach((chartData: any, index: number) => {
-      const subset = getChartSubset(chartData);
-      const key = subset ?? '__none__';
+      const value = getChartContextValue(chartData, contextGroupingKey);
+      const key = value ?? '__none__';
       if (!byKey[key]) {
         byKey[key] = [];
-        sections.push({ subset, indices: byKey[key] });
+        sections.push({ value, indices: byKey[key] });
       }
       byKey[key].push(index);
     });
     return sections;
-  }, [data]);
+  }, [data, contextGroupingKey]);
 
-  const definedSubsetCount = subsetSections.filter(
-    (s) => s.subset !== undefined,
+  const definedContextCount = contextSections.filter(
+    (s) => s.value !== undefined,
   ).length;
-  const useSections = definedSubsetCount >= 2;
+  const useSections = definedContextCount >= 2;
 
   function renderChart(globalIndex: number, gridSize: GridSize) {
     const Component = CHART_TYPES_CONFIG[chartType];
@@ -125,9 +128,9 @@ function ChartGrid({
     <ErrorBoundary>
       {useSections ? (
         <div className='ChartGrid__sections'>
-          {subsetSections.map((section) => (
+          {contextSections.map((section) => (
             <Accordion
-              key={section.subset ?? '__none__'}
+              key={section.value ?? '__none__'}
               defaultExpanded
               elevation={0}
               square
@@ -139,8 +142,8 @@ function ChartGrid({
                 className='ChartGrid__section__summary'
               >
                 <Text size={14} weight={600} tint={100}>
-                  {section.subset !== undefined
-                    ? `${SUBSET_CONTEXT_KEY}: ${section.subset}`
+                  {section.value !== undefined
+                    ? `${contextGroupingKey}: ${section.value}`
                     : 'Other'}
                 </Text>
                 <Text size={12} tint={50} className='ChartGrid__section__count'>

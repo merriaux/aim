@@ -28,6 +28,8 @@ function MetricsBar({
   onLiveUpdateConfigChange,
   tableView,
   onTableViewChange,
+  contextGroupingKey,
+  onContextGroupingKeyChange,
 }: IMetricsBarProps): React.FunctionComponentElement<React.ReactNode> {
   const [popover, setPopover] = React.useState<string>('');
 
@@ -58,6 +60,23 @@ function MetricsBar({
               checked={tableView === 'legend'}
               onChange={() =>
                 onTableViewChange(tableView === 'legend' ? 'table' : 'legend')
+              }
+              size='small'
+              color='primary'
+            />
+          </div>
+        )}
+        {onContextGroupingKeyChange && (
+          <div className='MetricsBar__tableViewToggle'>
+            <Text className='MetricsBar__tableViewToggle__Text' size={14}>
+              Group: {contextGroupingKey === 'category' ? 'category' : 'subset'}
+            </Text>
+            <Switcher
+              checked={contextGroupingKey === 'category'}
+              onChange={() =>
+                onContextGroupingKeyChange(
+                  contextGroupingKey === 'category' ? 'subset' : 'category',
+                )
               }
               size='small'
               color='primary'

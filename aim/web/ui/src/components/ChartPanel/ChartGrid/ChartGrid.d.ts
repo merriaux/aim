@@ -17,4 +17,5 @@ export interface IChartGridProps {
   resizeMode?: ResizeModeEnum;
   onMount?: () => void;
   controls?: React.ReactNode;
+  contextGroupingKey?: string;
 }

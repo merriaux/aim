@@ -50,6 +50,7 @@ export interface IChartPanelProps {
   onLegendsChange?: (legends: Partial<LegendsConfig>) => void;
   resizeMode?: ResizeModeEnum;
   selectOptions: IGroupingSelectOption[];
+  contextGroupingKey?: string;
 }
 
 export interface IChartPanelRef {

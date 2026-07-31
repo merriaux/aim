@@ -367,6 +367,36 @@ function Controls(
         </div>
         <div>
           <ErrorBoundary>
+            <Tooltip
+              title={`Group charts by context:${
+                props.contextGroupingKey === 'category' ? 'subset' : 'category'
+              }`}
+            >
+              <div
+                className={classNames('Controls__anchor', {
+                  active: props.contextGroupingKey === 'category',
+                  outlined: props.contextGroupingKey === 'category',
+                })}
+                onClick={() => {
+                  props.onContextGroupingKeyChange(
+                    props.contextGroupingKey === 'category'
+                      ? 'subset'
+                      : 'category',
+                  );
+                }}
+              >
+                <Icon
+                  className={classNames('Controls__icon', {
+                    active: props.contextGroupingKey === 'category',
+                  })}
+                  name='image-group'
+                />
+              </div>
+            </Tooltip>
+          </ErrorBoundary>
+        </div>
+        <div>
+          <ErrorBoundary>
             <ControlPopover
               title='Select zoom mode'
               anchor={({ onAnchorClick, opened }) => (
@@ -474,6 +504,7 @@ function Controls(
                 data={props.data}
                 chartProps={props.chartProps}
                 chartType={props.chartType}
+                contextGroupingKey={props.contextGroupingKey}
               />
             </ExportPreview>
           )}
