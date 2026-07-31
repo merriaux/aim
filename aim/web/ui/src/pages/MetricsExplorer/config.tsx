@@ -22,6 +22,7 @@ import Legends from 'modules/BaseExplorer/components/Controls/Legends';
 
 import { AimFlatObjectBase } from 'types/core/AimObjects';
 
+import ContextGroupingToggle from './components/ContextGroupingToggle';
 import getMetricsExplorerStaticContent from './getStaticContent';
 
 export const getMetricsDefaultConfig = (): typeof defaultHydration => {
@@ -154,6 +155,9 @@ export const getMetricsDefaultConfig = (): typeof defaultHydration => {
         },
         persist: PersistenceTypesEnum.Url,
       },
+    };
+    draft.contextGrouping = {
+      component: ContextGroupingToggle,
     };
     draft.zoom = {
       component: Zoom,
