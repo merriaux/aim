@@ -84,15 +84,28 @@ function Metrics(
 
   // Unique runs (name + plot color) shown as a legend when the table is collapsed.
   const runsLegend = React.useMemo(() => {
-    const seen = new Map<string, { name: string; color: string }>();
+    const seen = new Map<
+      string,
+      { name: string; color: string; lineKeys: string[] }
+    >();
     (props.lineChartData || []).forEach((chartData: ILine[]) => {
       chartData.forEach((line: any) => {
         const hash = line?.run?.hash;
-        if (hash && !seen.has(hash)) {
+        if (!hash) {
+          return;
+        }
+
+        if (!seen.has(hash)) {
           seen.set(hash, {
             name: line?.run?.props?.name || hash,
             color: line?.color || '#000',
+            lineKeys: [],
           });
+        }
+
+        const runLegend = seen.get(hash);
+        if (line.key && !runLegend?.lineKeys.includes(line.key)) {
+          runLegend?.lineKeys.push(line.key);
         }
       });
     });
@@ -101,6 +114,21 @@ function Metrics(
       ...value,
     }));
   }, [props.lineChartData]);
+
+  const onRunsLegendMouseEnter = React.useCallback(
+    (lineKeys: string[]) => {
+      if (!props.focusedState?.active) {
+        props.chartPanelRef.current?.setActiveRunLines?.(lineKeys);
+      }
+    },
+    [props.chartPanelRef, props.focusedState?.active],
+  );
+
+  const onRunsLegendMouseLeave = React.useCallback(() => {
+    if (!props.focusedState?.active) {
+      props.chartPanelRef.current?.setActiveRunLines?.();
+    }
+  }, [props.chartPanelRef, props.focusedState?.active]);
 
   return (
     <ErrorBoundary>
@@ -275,6 +303,10 @@ function Metrics(
                                 <div
                                   className='Metrics__runsLegend__item'
                                   key={run.hash}
+                                  onMouseEnter={() =>
+                                    onRunsLegendMouseEnter(run.lineKeys)
+                                  }
+                                  onMouseLeave={onRunsLegendMouseLeave}
                                 >
                                   <span
                                     className='Metrics__runsLegend__color'

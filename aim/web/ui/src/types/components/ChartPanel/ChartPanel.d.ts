@@ -59,6 +59,7 @@ export interface IChartPanelRef {
     focusedStateActive: boolean = false,
     force: boolean = false,
   ) => void;
+  setActiveRunLines?: (lineKeys?: string[]) => void;
   updateLines: (data: IProcessedData[]) => void;
 }
 

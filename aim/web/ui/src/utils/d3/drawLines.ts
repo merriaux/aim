@@ -54,6 +54,11 @@ function drawLines(args: IDrawLinesArgs): void {
         (d: IProcessedData) =>
           `Line-Sel-${highlightMode}-${d.selectors?.[highlightMode]}`,
       )
+      .attr(
+        'data-run-selector',
+        (d: IProcessedData) =>
+          `Line-Sel-${HighlightEnum.Run}-${d.selectors?.[HighlightEnum.Run]}`,
+      )
       .style('fill', 'none')
       .style('stroke', (d: IProcessedData) => d.color)
       .style('stroke-dasharray', (d: IProcessedData) => d.dasharray)

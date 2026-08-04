@@ -281,6 +281,28 @@ function drawHoverAttributes(args: IDrawHoverAttributesArgs): void {
     }
   }
 
+  function highlightLinesBySelector(
+    dataSelector?: string,
+    selectorAttribute: string = 'data-selector',
+  ): void {
+    if (!dataSelector) {
+      clearHoverAttributes();
+      return;
+    }
+
+    linesNodeRef.current.classed('highlight', true);
+    attrNodeRef.current.classed('highlight', true);
+
+    highlightedNodeRef.current
+      ?.classed('highlighted', false)
+      .classed('active', false);
+
+    highlightedNodeRef.current = linesNodeRef.current
+      .selectAll(`[${selectorAttribute}="${dataSelector}"]`)
+      .classed('highlighted', true)
+      .raise();
+  }
+
   function drawActiveLine(key: string): void {
     if (attrRef.current.lineKey) {
       linesNodeRef.current
@@ -955,6 +977,7 @@ function drawHoverAttributes(args: IDrawHoverAttributesArgs): void {
 
   attrRef.current.updateScales = updateScales;
   attrRef.current.setActiveLineAndCircle = setActiveLineAndCircle;
+  attrRef.current.highlightLinesBySelector = highlightLinesBySelector;
   attrRef.current.updateHoverAttributes = updateHoverAttributes;
   attrRef.current.updateFocusedChart = updateFocusedChart;
   attrRef.current.clearHoverAttributes = clearHoverAttributes;

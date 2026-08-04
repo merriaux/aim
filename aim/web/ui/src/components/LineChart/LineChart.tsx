@@ -298,6 +298,15 @@ const LineChart = React.forwardRef(function LineChart(
     updateHoverAttributes: (xValue: number, dataSelector?: string) => {
       attributesRef.current.updateHoverAttributes?.(xValue, dataSelector);
     },
+    highlightLinesBySelector: (
+      dataSelector?: string,
+      selectorAttribute?: string,
+    ) => {
+      attributesRef.current.highlightLinesBySelector?.(
+        dataSelector,
+        selectorAttribute,
+      );
+    },
     clearHoverAttributes: () => {
       attributesRef.current.clearHoverAttributes?.();
     },

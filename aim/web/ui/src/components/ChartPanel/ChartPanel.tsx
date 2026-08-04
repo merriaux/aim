@@ -12,7 +12,7 @@ import {
   ISyncHoverStateArgs,
 } from 'types/utils/d3/drawHoverAttributes';
 
-import { ChartTypeEnum } from 'utils/d3';
+import { ChartTypeEnum, HighlightEnum } from 'utils/d3';
 
 import ResizingFallback from '../ResizingFallback';
 
@@ -133,6 +133,24 @@ const ChartPanel = React.forwardRef(function ChartPanel(
           lineKey,
           focusedStateActive,
           force,
+        );
+      });
+    },
+    setActiveRunLines: (lineKeys?: string[]) => {
+      const lineKeySet = lineKeys ? new Set(lineKeys) : null;
+
+      chartRefs.forEach((chartRef, index) => {
+        const chartLine = lineKeySet
+          ? props.data?.[index]?.find((line: any) => lineKeySet.has(line.key))
+          : undefined;
+        const runSelector = chartLine?.selectors?.[HighlightEnum.Run];
+        const dataSelector = runSelector
+          ? `Line-Sel-${HighlightEnum.Run}-${runSelector}`
+          : undefined;
+
+        chartRef.current?.highlightLinesBySelector?.(
+          dataSelector,
+          'data-run-selector',
         );
       });
     },

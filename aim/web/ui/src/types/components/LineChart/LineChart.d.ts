@@ -64,6 +64,10 @@ export interface ILineChartRef {
     focusedStateActive: boolean = false,
     force: boolean = false,
   ) => void;
+  highlightLinesBySelector: (
+    dataSelector?: string,
+    selectorAttribute?: string,
+  ) => void;
   updateHoverAttributes: (xValue: number, dataSelector?: string) => void;
   clearHoverAttributes: () => void;
   setFocusedState: (focusedState: IFocusedState) => void;
@@ -91,6 +95,10 @@ export interface IAttributesRef {
     lineKey: string,
     focusedStateActive: boolean = false,
     force: boolean = false,
+  ) => void;
+  highlightLinesBySelector?: (
+    dataSelector?: string,
+    selectorAttribute?: string,
   ) => void;
   updateHoverAttributes?: (xValue: number, dataSelector?: string) => void;
   updateFocusedChart?: (args?: IUpdateFocusedChartArgs) => void;
