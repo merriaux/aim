@@ -100,6 +100,7 @@ function drawHoverAttributes(args: IDrawHoverAttributesArgs): void {
             key: item.key,
             color: item.color || '#000',
             inProgress: isLastCircle && !!item?.run?.props?.active,
+            distance: r,
             ...scaledValue,
           };
           if (r === minDistance) {
@@ -644,6 +645,7 @@ function drawHoverAttributes(args: IDrawHoverAttributesArgs): void {
       xPos,
       yPos,
       inProgress: !!circle.inProgress,
+      hoverDistance: circle.distance,
       chartIndex: index || 0,
       visId: id,
       pointRect,

@@ -68,6 +68,7 @@ export interface INearestCircle {
   key: string;
   color: string;
   inProgress?: boolean;
+  distance?: number;
 }
 
 export interface IActivePoint {
@@ -79,6 +80,7 @@ export interface IActivePoint {
   chartIndex: number;
   visId: string;
   inProgress?: boolean;
+  hoverDistance?: number;
   pointRect: IActivePointRect | null;
   rect: IActiveElementRect;
 }

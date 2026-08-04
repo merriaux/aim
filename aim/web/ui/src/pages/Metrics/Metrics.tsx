@@ -31,6 +31,7 @@ import { AppNameEnum } from 'services/models/explorer';
 
 import { ILine } from 'types/components/LineChart/LineChart';
 import { IMetricProps } from 'types/pages/metrics/Metrics';
+import { IActivePoint } from 'types/utils/d3/drawHoverAttributes';
 
 import { ChartTypeEnum, CurveEnum } from 'utils/d3';
 
@@ -40,6 +41,8 @@ import SelectForm from './components/SelectForm/SelectForm';
 
 import './Metrics.scss';
 
+const RUN_LEGEND_HOVER_DISTANCE = 12;
+
 function Metrics(
   props: IMetricProps,
 ): React.FunctionComponentElement<React.ReactNode> {
@@ -48,6 +51,10 @@ function Metrics(
   const [tableView, setTableView] = React.useState<'table' | 'legend'>('table');
   const [contextGroupingKey, setContextGroupingKey] =
     React.useState<string>('subset');
+  const [hoveredLineKey, setHoveredLineKey] = React.useState<string | null>(
+    null,
+  );
+  const { onActivePointChange } = props;
   const chartProps = React.useMemo(() => {
     return (props.lineChartData || []).map((chartData: ILine[]) => ({
       axesScaleType: props.axesScaleType,
@@ -129,6 +136,41 @@ function Metrics(
       props.chartPanelRef.current?.setActiveRunLines?.();
     }
   }, [props.chartPanelRef, props.focusedState?.active]);
+
+  const onChartActivePointChange = React.useCallback(
+    (activePoint: IActivePoint, focusedStateActive?: boolean) => {
+      setHoveredLineKey(
+        activePoint.hoverDistance !== undefined &&
+          activePoint.hoverDistance <= RUN_LEGEND_HOVER_DISTANCE
+          ? activePoint.key
+          : null,
+      );
+      onActivePointChange?.(activePoint, focusedStateActive);
+    },
+    [onActivePointChange],
+  );
+
+  const onChartActivePointLeave = React.useCallback(() => {
+    setHoveredLineKey(null);
+  }, []);
+
+  const activeRunHash = React.useMemo(() => {
+    const activeLineKey = hoveredLineKey;
+    if (!activeLineKey) {
+      return undefined;
+    }
+
+    for (const chartData of props.lineChartData || []) {
+      const activeLine = chartData.find(
+        (line: any) => line.key === activeLineKey,
+      );
+      if (activeLine?.run?.hash) {
+        return activeLine.run.hash;
+      }
+    }
+
+    return undefined;
+  }, [hoveredLineKey, props.lineChartData]);
 
   return (
     <ErrorBoundary>
@@ -227,7 +269,8 @@ function Metrics(
                         chartProps={chartProps}
                         resizeMode={props.resizeMode}
                         contextGroupingKey={contextGroupingKey}
-                        onActivePointChange={props.onActivePointChange}
+                        onActivePointChange={onChartActivePointChange}
+                        onActivePointLeave={onChartActivePointLeave}
                         onRunsTagsChange={props.onRunsTagsChange}
                         onChangeTooltip={props.onChangeTooltip}
                         onLegendsChange={props.onLegendsChange}
@@ -301,7 +344,15 @@ function Metrics(
                             {runsLegend.length > 0 ? (
                               runsLegend.map((run) => (
                                 <div
-                                  className='Metrics__runsLegend__item'
+                                  className={classNames(
+                                    'Metrics__runsLegend__item',
+                                    {
+                                      active: run.hash === activeRunHash,
+                                      dimmed:
+                                        activeRunHash &&
+                                        run.hash !== activeRunHash,
+                                    },
+                                  )}
                                   key={run.hash}
                                   onMouseEnter={() =>
                                     onRunsLegendMouseEnter(run.lineKeys)

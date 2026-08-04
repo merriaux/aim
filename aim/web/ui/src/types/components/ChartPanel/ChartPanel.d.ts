@@ -46,6 +46,7 @@ export interface IChartPanelProps {
     activePoint: IActivePoint,
     focusedStateActive?: boolean,
   ) => void;
+  onActivePointLeave?: () => void;
   onChangeTooltip: (tooltip: ITooltip) => void;
   onLegendsChange?: (legends: Partial<LegendsConfig>) => void;
   resizeMode?: ResizeModeEnum;

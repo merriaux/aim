@@ -74,6 +74,15 @@
       display: flex;
       align-items: center;
       max-width: 16rem;
+      transition: opacity 0.15s ease;
+
+      &.dimmed {
+        opacity: 0.45;
+      }
+
+      &.active {
+        font-weight: $font-600;
+      }
     }
     &__color {
       flex-shrink: 0;

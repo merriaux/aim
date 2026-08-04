@@ -94,11 +94,18 @@ const ChartPanel = React.forwardRef(function ChartPanel(
         chartRefs.forEach((chartRef) => {
           chartRef.current?.clearHoverAttributes?.();
         });
+        props.onActivePointLeave?.();
         setActivePointRect(null);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chartRefs, setActiveElemPos, props.chartType, props.onActivePointChange],
+    [
+      chartRefs,
+      setActiveElemPos,
+      props.chartType,
+      props.onActivePointChange,
+      props.onActivePointLeave,
+    ],
   );
 
   const displayLegends = React.useMemo(
