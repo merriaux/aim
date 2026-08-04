@@ -243,13 +243,21 @@ export function processDistributionsData(data: Partial<DistributionsData>) {
  * process texts data
  */
 export function processTextsData(data: Partial<TextsData>) {
-  const { record_range_total, index_range_total, iters, values } = data;
+  const {
+    record_range_total,
+    index_range_total,
+    iters,
+    values,
+    name,
+    context,
+  } = data;
   const processedValues: any[] = [];
   if (values) {
     let count = 0;
     values.forEach((stepValues, stepIndex) => {
       stepValues.forEach((text) => {
         processedValues.push({
+          name,
           step: iters?.[stepIndex],
           index: text.index,
           text: text.data,
@@ -264,6 +272,8 @@ export function processTextsData(data: Partial<TextsData>) {
     iters,
     record_range: [record_range_total?.[0], (record_range_total?.[1] || 0) - 1],
     index_range: [index_range_total?.[0], (index_range_total?.[1] || 0) - 1],
+    name,
+    context,
     processedValues: _.orderBy(processedValues, ['step'], ['desc']),
     processedDataType: VisualizationMenuTitles.texts,
   };
