@@ -146,6 +146,7 @@ def restore_run_backup(repo, run_hash):
 def prune(repo):
     from collections.abc import MutableMapping
 
+    from aim.sdk.repo import INDEX_DB_OPEN_TIMEOUT
     from tqdm import tqdm
 
     def flatten(d, parent_path=None):
@@ -198,8 +199,9 @@ def prune(repo):
         return
 
     # acquire index container to delete orphan paths
-    index_tree = repo._get_index_tree('meta', timeout=5).subtree('meta')
+    with repo.index_db_lock():
+        index_tree = repo._get_index_tree('meta', timeout=INDEX_DB_OPEN_TIMEOUT).subtree('meta')
 
-    # start deleting with the deepest paths first to bypass the cases when parent path is deleted before the child
-    for path in sorted(repo_paths, key=len, reverse=True):
-        del index_tree[path]
+        # start deleting with the deepest paths first to bypass the cases when parent path is deleted before the child
+        for path in sorted(repo_paths, key=len, reverse=True):
+            del index_tree[path]

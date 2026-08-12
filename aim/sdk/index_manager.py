@@ -10,7 +10,8 @@ from typing import Dict
 
 import aimrocks.errors
 
-from aim.sdk.repo import Repo
+from aim.sdk.repo import INDEX_DB_OPEN_TIMEOUT, Repo
+from filelock import Timeout
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import ObservedWatch
@@ -183,7 +184,12 @@ class RepoIndexManager:
     def add_run_to_queue(self, run_hash):
         if run_hash in self._corrupted_runs:
             return
-        timestamp = os.path.getmtime(os.path.join(self.chunks_dir, run_hash))
+        try:
+            timestamp = os.path.getmtime(os.path.join(self.chunks_dir, run_hash))
+        except FileNotFoundError:
+            # The run was deleted after the change was detected; nothing left to index.
+            self._stop_monitoring_chunk(run_hash)
+            return
         with self.lock:
             self.indexing_queue.put((timestamp, run_hash))
         logger.debug(f'Run {run_hash} added to indexing queue with timestamp {timestamp}')
@@ -203,20 +209,32 @@ class RepoIndexManager:
 
     def index(self, run_hash):
         import gc
+
+        if not os.path.exists(os.path.join(self.chunks_dir, run_hash)):
+            # The run was deleted while it sat in the queue.
+            self._stop_monitoring_chunk(run_hash)
+            return True
+
         try:
-            index = self.repo._get_index_tree('meta', 0).view(())
-            run_checksum = self._get_run_checksum(run_hash)
-            meta_tree = self.repo.request_tree('meta', run_hash, read_only=True, skip_read_optimization=True).subtree(
-                'meta'
-            )
-            meta_run_tree = meta_tree.subtree('chunks').subtree(run_hash)
-            meta_run_tree.finalize(index=index)
-            index['index_cache', run_hash] = run_checksum
+            with self.repo.index_db_lock():
+                index = self.repo._get_index_tree('meta', INDEX_DB_OPEN_TIMEOUT).view(())
+                run_checksum = self._get_run_checksum(run_hash)
+                meta_tree = self.repo.request_tree(
+                    'meta', run_hash, read_only=True, skip_read_optimization=True
+                ).subtree('meta')
+                meta_run_tree = meta_tree.subtree('chunks').subtree(run_hash)
+                meta_run_tree.finalize(index=index)
+                index['index_cache', run_hash] = run_checksum
 
-            if meta_run_tree.get('end_time') is not None:
-                logger.debug(f'Indexing thread detected finished run: {run_hash}. Stopping monitoring...')
-                self._stop_monitoring_chunk(run_hash)
+                if meta_run_tree.get('end_time') is not None:
+                    logger.debug(f'Indexing thread detected finished run: {run_hash}. Stopping monitoring...')
+                    self._stop_monitoring_chunk(run_hash)
 
+        except Timeout:
+            # Another process holds the index db (deleting runs, reindexing). The run is
+            # still outdated, so requeue it instead of dropping it as corrupted.
+            logger.debug(f'Index db is busy. Postponing indexing of run {run_hash}.')
+            self.add_run_to_queue(run_hash)
         except (aimrocks.errors.RocksIOError, aimrocks.errors.Corruption):
             logger.warning(f'Indexing thread detected corrupted run: {run_hash}. Skipping.')
             self._corrupted_runs.add(run_hash)

@@ -31,7 +31,7 @@ from aim.sdk.types import QueryReportMode
 from aim.sdk.utils import clean_repo_path, search_aim_repo
 from aim.storage.container import Container
 from aim.storage.lock_proxy import ProxyLock
-from aim.storage.locking import SoftFileLock
+from aim.storage.locking import AutoFileLock, SoftFileLock
 from aim.storage.rockscontainer import RocksContainer
 from aim.storage.structured.db import DB
 from aim.storage.structured.proxy import StructuredRunProxy
@@ -50,6 +50,18 @@ class ContainerConfig(NamedTuple):
     name: str
     sub: Optional[str]
     read_only: bool
+
+
+# RocksDB allows a single read-write opener per database and refuses (rather than waits)
+# when another one holds it, so every writer of the shared `meta/index` database has to
+# serialize on `Repo.index_db_lock` first.
+INDEX_DB_LOCK_TIMEOUT = 60
+# A process that released the lock may still be closing the database, and Aim versions
+# without the lock don't take it at all, hence the extra wait on RocksDB's own LOCK.
+INDEX_DB_OPEN_TIMEOUT = 30
+INDEX_DB_OPEN_RETRY_INTERVAL = 0.5
+
+INDEX_CONTAINER_CONFIG = ContainerConfig('meta/index', None, read_only=True)
 
 
 class RepoStatus(Enum):
@@ -152,9 +164,11 @@ class Repo:
         self.structured_db = None
 
         if not self.is_remote_repo:
+            os.makedirs(os.path.join(self.path, 'locks'), exist_ok=True)
             self._lock_manager = LockManager(self.path)
             self._sdb_lock_path = os.path.join(self.path, 'locks', 'structured_db_lock')
             self._sdb_lock = SoftFileLock(self._sdb_lock_path, timeout=5 * 60)  # timeout after 5 minutes
+            self._index_db_lock = AutoFileLock(os.path.join(self.path, 'locks', 'index'), timeout=INDEX_DB_LOCK_TIMEOUT)
 
             status = self.check_repo_status(self.root_path)
             self.structured_db = DB.from_path(self.path)
@@ -283,6 +297,29 @@ class Repo:
         else:
             return ProxyTree(self._client, name, '', read_only=False, index=True, timeout=timeout)
 
+    @contextmanager
+    def index_db_lock(self, timeout: Optional[float] = None):
+        """Serialize read-write access to the `meta/index` database across processes.
+
+        Both the indexing daemon and run deletion write to that database. Holding the
+        lock for the whole operation also keeps the daemon from re-adding index entries
+        for a run whose data is being removed.
+        """
+        if self.is_remote_repo:
+            yield
+            return
+
+        with self._index_db_lock.acquire(timeout=timeout):
+            try:
+                yield
+            finally:
+                # The database handle has to be dropped before the lock is released,
+                # otherwise RocksDB's own LOCK is still held when the next process
+                # takes over.
+                container = self.container_pool.pop(INDEX_CONTAINER_CONFIG, None)
+                if container is not None:
+                    container.close()
+
     def _get_index_container(self, name: str, timeout: int) -> Container:
         if self.read_only:
             raise ValueError('Repo is read-only')
@@ -292,10 +329,20 @@ class Repo:
         container = self.container_pool.get(container_config)
         if container is None:
             path = os.path.join(self.path, name)
-            container = RocksContainer(path, read_only=False, timeout=timeout)
+            container = self._open_index_container(path, timeout)
             self.container_pool[container_config] = container
 
         return container
+
+    def _open_index_container(self, path: str, timeout: float) -> Container:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                return RocksContainer(path, read_only=False, timeout=timeout)
+            except aimrocks.errors.RocksIOError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(INDEX_DB_OPEN_RETRY_INTERVAL)
 
     def request_tree(self, name: str, sub: str = None, *, read_only: bool, skip_read_optimization: bool = False):
         if not self.is_remote_repo:
@@ -878,30 +925,29 @@ class Repo:
             self.structured_db.delete_experiment(exp_id)
 
     def _delete_local_run_data(self, run_hash: str):
-        # remove data from index container
-        # timeout=30: the index daemon holds the LOCK continuously; give it
-        # enough time to finish its current write before we acquire it.
-        index_tree = self._get_index_container('meta', timeout=30).tree()
-        del index_tree.subtree(('meta', 'chunks'))[run_hash]
+        with self.index_db_lock():
+            # remove data from index container
+            index_tree = self._get_index_container('meta', timeout=INDEX_DB_OPEN_TIMEOUT).tree()
+            del index_tree.subtree(('meta', 'chunks'))[run_hash]
 
-        # delete rocksdb containers data
-        sub_dirs = ('chunks', 'progress', 'locks')
-        for sub_dir in sub_dirs:
-            meta_path = os.path.join(self.path, 'meta', sub_dir, run_hash)
-            if os.path.isfile(meta_path):
-                os.remove(meta_path)
-            else:
-                shutil.rmtree(meta_path, ignore_errors=True)
-            seqs_path = os.path.join(self.path, 'seqs', sub_dir, run_hash)
-            if os.path.isfile(seqs_path):
-                os.remove(seqs_path)
-            else:
-                shutil.rmtree(seqs_path, ignore_errors=True)
+            # delete rocksdb containers data
+            sub_dirs = ('chunks', 'progress', 'locks')
+            for sub_dir in sub_dirs:
+                meta_path = os.path.join(self.path, 'meta', sub_dir, run_hash)
+                if os.path.isfile(meta_path):
+                    os.remove(meta_path)
+                else:
+                    shutil.rmtree(meta_path, ignore_errors=True)
+                seqs_path = os.path.join(self.path, 'seqs', sub_dir, run_hash)
+                if os.path.isfile(seqs_path):
+                    os.remove(seqs_path)
+                else:
+                    shutil.rmtree(seqs_path, ignore_errors=True)
 
-        # remove dangling locks
-        lock_path = os.path.join(self.path, 'locks', f'{run_hash}.softlock')
-        if os.path.exists(lock_path):
-            os.remove(lock_path)
+            # remove dangling locks
+            lock_path = os.path.join(self.path, 'locks', f'{run_hash}.softlock')
+            if os.path.exists(lock_path):
+                os.remove(lock_path)
 
     def _delete_run(self, run_hash):
         if self.is_remote_repo:
@@ -1077,14 +1123,10 @@ class Repo:
 
         index_manager = RepoIndexManager.get_index_manager(self)
 
-        # force delete the index db and the locks
-
-        index_lock_path = os.path.join(self.path, 'locks', 'index')
-        if os.path.exists(index_lock_path):
-            os.remove(index_lock_path)
-
-        index_db_path = os.path.join(self.path, 'meta', 'index')
-        shutil.rmtree(index_db_path, ignore_errors=True)
+        # force delete the index db
+        with self.index_db_lock():
+            index_db_path = os.path.join(self.path, 'meta', 'index')
+            shutil.rmtree(index_db_path, ignore_errors=True)
 
         # recreate the index db
         run_hashes = self._all_run_hashes()
