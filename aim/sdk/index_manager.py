@@ -96,6 +96,7 @@ class RepoIndexManager:
 
         self._corrupted_runs = set()
         self._failed_attempts: Dict[str, int] = dict()
+        self._stale_handle_retry = False
 
         self.indexing_queue = queue.PriorityQueue()
         self.lock = threading.Lock()
@@ -137,28 +138,56 @@ class RepoIndexManager:
     def _monitor_existing_chunks(self):
         while not self._stop_event.is_set():
             try:
-                index_db = self.repo.request_tree('meta', read_only=True)
-                monitored_chunks = set(self._watches.keys())
-                for chunk_path in self.chunks_dir.iterdir():
-                    try:
-                        if (
-                            chunk_path.is_dir()
-                            and chunk_path.name not in monitored_chunks
-                            and self._is_run_index_outdated(chunk_path.name, index_db)
-                        ):
-                            logger.debug(f'Monitoring existing chunk: {chunk_path}')
-                            self.monitor_chunk_directory(chunk_path)
-                            logger.debug(f'Triggering indexing for run {chunk_path.name}')
-                            self.add_run_to_queue(chunk_path.name)
-                    except Exception as e:
-                        logger.warning(f'Error checking chunk {chunk_path}: {e}')
-                # Drop only the handle this loop opened. Clearing the whole pool from
-                # here would race the indexing thread, which relies on it to close the
-                # read-write index handle before releasing the cross-process lock.
-                self.repo.container_pool.pop(ContainerConfig('meta', None, True), None)
+                self._scan_existing_chunks()
             except Exception as e:
                 logger.error(f'_monitor_existing_chunks iteration failed: {e}')
             time.sleep(5)
+
+    def _scan_existing_chunks(self):
+        """Queue every run whose index entry is out of date.
+
+        This is the only path that picks up a run nobody is watching, so a failure here
+        stops new runs from ever being indexed.
+        """
+        try:
+            index_db = self.repo.request_tree('meta', read_only=True)
+            monitored_chunks = set(self._watches.keys())
+            for chunk_path in self.chunks_dir.iterdir():
+                try:
+                    if (
+                        chunk_path.is_dir()
+                        and chunk_path.name not in monitored_chunks
+                        and self._is_run_index_outdated(chunk_path.name, index_db)
+                    ):
+                        logger.debug(f'Monitoring existing chunk: {chunk_path}')
+                        self.monitor_chunk_directory(chunk_path)
+                        logger.debug(f'Triggering indexing for run {chunk_path.name}')
+                        self.add_run_to_queue(chunk_path.name)
+                except aimrocks.errors.RocksIOError as e:
+                    # The read-only handle still refers to sst files a compaction has
+                    # since removed. Every remaining chunk of this scan would fail the
+                    # same way, so give up on the stale handle and rescan with a fresh
+                    # one rather than skipping the rest of the runs.
+                    logger.debug(f'Index db handle went stale, restarting scan: {e}')
+                    return self._rescan_with_fresh_handle()
+                except Exception as e:
+                    logger.warning(f'Error checking chunk {chunk_path}: {e}')
+        finally:
+            # Drop only the handle this scan opened. Clearing the whole pool from here
+            # would race the indexing thread, which relies on it to close the read-write
+            # index handle before releasing the cross-process lock.
+            self.repo.container_pool.pop(ContainerConfig('meta', None, True), None)
+
+    def _rescan_with_fresh_handle(self):
+        if self._stale_handle_retry:
+            # Already retried once for this scan; the next 5s tick will try again.
+            return
+        self._stale_handle_retry = True
+        try:
+            self.repo.container_pool.pop(ContainerConfig('meta', None, True), None)
+            self._scan_existing_chunks()
+        finally:
+            self._stale_handle_retry = False
 
     def _stop_monitoring_chunk(self, run_hash):
         watch = self._watches.pop(run_hash, None)
