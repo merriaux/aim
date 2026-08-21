@@ -10,7 +10,7 @@ from typing import Dict
 
 import aimrocks.errors
 
-from aim.sdk.repo import INDEX_DB_OPEN_TIMEOUT, Repo
+from aim.sdk.repo import INDEX_DB_OPEN_TIMEOUT, ContainerConfig, Repo
 from filelock import Timeout
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -95,6 +95,7 @@ class RepoIndexManager:
         self.chunks_dir.mkdir(parents=True, exist_ok=True)
 
         self._corrupted_runs = set()
+        self._failed_attempts: Dict[str, int] = dict()
 
         self.indexing_queue = queue.PriorityQueue()
         self.lock = threading.Lock()
@@ -151,7 +152,10 @@ class RepoIndexManager:
                             self.add_run_to_queue(chunk_path.name)
                     except Exception as e:
                         logger.warning(f'Error checking chunk {chunk_path}: {e}')
-                self.repo.container_pool.clear()
+                # Drop only the handle this loop opened. Clearing the whole pool from
+                # here would race the indexing thread, which relies on it to close the
+                # read-write index handle before releasing the cross-process lock.
+                self.repo.container_pool.pop(ContainerConfig('meta', None, True), None)
             except Exception as e:
                 logger.error(f'_monitor_existing_chunks iteration failed: {e}')
             time.sleep(5)
@@ -161,6 +165,22 @@ class RepoIndexManager:
         if watch:
             self.chunk_change_observer.unschedule(watch)
             logger.debug(f'Stopped monitoring chunk: {run_hash}')
+
+    # Number of consecutive failures before a run is given up on. A single transient
+    # error (busy index db, exhausted file descriptors) must not exclude a run from
+    # indexing for the whole lifetime of the process.
+    MAX_INDEX_ATTEMPTS = 5
+
+    def _record_failure(self, run_hash, reason):
+        attempts = self._failed_attempts.get(run_hash, 0) + 1
+        self._failed_attempts[run_hash] = attempts
+        if attempts >= self.MAX_INDEX_ATTEMPTS:
+            logger.warning(f'Giving up on indexing run {run_hash} after {attempts} attempts: {reason}.')
+            self._corrupted_runs.add(run_hash)
+            self._stop_monitoring_chunk(run_hash)
+        else:
+            logger.warning(f'Indexing run {run_hash} failed ({attempts}/{self.MAX_INDEX_ATTEMPTS}): {reason}.')
+            self.add_run_to_queue(run_hash)
 
     # Maximum number of chunk directories to watch simultaneously.
     # PollingObserver opens file descriptors for each watch; capping this
@@ -225,6 +245,7 @@ class RepoIndexManager:
                 meta_run_tree = meta_tree.subtree('chunks').subtree(run_hash)
                 meta_run_tree.finalize(index=index)
                 index['index_cache', run_hash] = run_checksum
+                self._failed_attempts.pop(run_hash, None)
 
                 if meta_run_tree.get('end_time') is not None:
                     logger.debug(f'Indexing thread detected finished run: {run_hash}. Stopping monitoring...')
@@ -235,16 +256,18 @@ class RepoIndexManager:
             # still outdated, so requeue it instead of dropping it as corrupted.
             logger.debug(f'Index db is busy. Postponing indexing of run {run_hash}.')
             self.add_run_to_queue(run_hash)
-        except (aimrocks.errors.RocksIOError, aimrocks.errors.Corruption):
-            logger.warning(f'Indexing thread detected corrupted run: {run_hash}. Skipping.')
+        except aimrocks.errors.Corruption as e:
+            logger.warning(f'Indexing thread detected corrupted run: {run_hash}. Skipping. {e}')
             self._corrupted_runs.add(run_hash)
             self._stop_monitoring_chunk(run_hash)
+        except aimrocks.errors.RocksIOError as e:
+            # Usually contention on the index db rather than damaged data: the run is
+            # intact and has to be retried, not written off.
+            self._record_failure(run_hash, e)
         except Exception as e:
-            # Catch-all: log and skip rather than propagating to
+            # Catch-all: log and retry rather than propagating to
             # _process_indexing_queue where it would kill the thread.
-            logger.warning(f'Indexing run {run_hash} failed unexpectedly: {e}. Skipping.')
-            self._corrupted_runs.add(run_hash)
-            self._stop_monitoring_chunk(run_hash)
+            self._record_failure(run_hash, e)
         finally:
             # Release TreeView references so RocksDB containers can be GC'd
             # promptly. Without this, WeakValueDictionary entries stay alive

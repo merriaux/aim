@@ -43,6 +43,8 @@ from cachetools.func import ttl_cache
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from aim.storage.treeview import TreeView
+
 logger = logging.getLogger(__name__)
 
 
@@ -158,6 +160,8 @@ class Repo:
 
         self.container_pool: Dict[ContainerConfig, Container] = WeakValueDictionary()
         self.persistent_pool: Dict[ContainerConfig, Container] = dict()
+        # Read-write handle on `meta/index`, held while `index_db_lock` is taken.
+        self._index_container: Optional[Container] = None
 
         self._run_props_cache_hint = None
         self._encryption_key = None
@@ -315,8 +319,11 @@ class Repo:
             finally:
                 # The database handle has to be dropped before the lock is released,
                 # otherwise RocksDB's own LOCK is still held when the next process
-                # takes over.
-                container = self.container_pool.pop(INDEX_CONTAINER_CONFIG, None)
+                # takes over. `_index_container` is tracked separately from
+                # `container_pool`, which is a weak mapping any thread may clear.
+                container = self._index_container
+                self._index_container = None
+                self.container_pool.pop(INDEX_CONTAINER_CONFIG, None)
                 if container is not None:
                     container.close()
 
@@ -331,6 +338,7 @@ class Repo:
             path = os.path.join(self.path, name)
             container = self._open_index_container(path, timeout)
             self.container_pool[container_config] = container
+        self._index_container = container
 
         return container
 
@@ -351,6 +359,23 @@ class Repo:
             ).tree()
         else:
             return ProxyTree(self._client, name, sub, read_only=read_only)
+
+    def request_run_meta_tree(self, run_hash: str) -> 'TreeView':
+        """Read-only meta tree to access `run_hash` through.
+
+        `meta/index` is a read cache that the indexing daemon fills asynchronously, so a
+        run can be fully written on disk and still be absent from it. Reading such a run
+        through the index yields an empty run, so fall back to the run's own container.
+        `index_cache` is written by every index writer together with the run's data, which
+        makes it a single point lookup instead of listing every indexed run.
+        """
+        if self.is_remote_repo:
+            return self.request_tree('meta', read_only=True).subtree('meta')
+
+        index = self.request_tree('meta', read_only=True)
+        if index.get(('index_cache', run_hash)) is not None:
+            return index.subtree('meta')
+        return self.request_tree('meta', run_hash, read_only=True).subtree('meta')
 
     def request_container(self, name: str, sub: str = None, *, read_only: bool, skip_read_optimization: bool = False):
         container_config = ContainerConfig(name, sub, read_only)
@@ -555,8 +580,12 @@ class Repo:
         Returns:
             :obj:`Run` object if hash is found in repository. `None` otherwise.
         """
-        # TODO: [MV] optimize existence check for run
-        if run_hash is None or run_hash not in self.meta_tree.subtree('chunks').keys():
+        # Existence is decided by the run's data, not by `meta/index`: the index is a
+        # cache the indexing daemon fills asynchronously, so a freshly created run is
+        # already listed by the UI (which reads the structured db) while still missing
+        # from the index, and reporting it as absent surfaced as a spurious "Run not
+        # found." on the run page.
+        if run_hash is None or not self.run_exists(run_hash):
             return None
         else:
             return Run(run_hash, repo=self, read_only=True)
